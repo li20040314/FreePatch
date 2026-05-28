@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>FreePatch 补丁打包工具</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:"Microsoft YaHei","Segoe UI",sans-serif; background:#f0f2f5; color:#333; }
+.header { background:#1890ff; color:#fff; padding:16px 24px; font-size:20px; font-weight:bold; }
+.container { max-width:920px; margin:20px auto; padding:0 16px; }
+.card { background:#fff; border-radius:6px; box-shadow:0 2px 8px rgba(0,0,0,.09); padding:24px; margin-bottom:16px; }
+.card-title { font-size:15px; font-weight:600; margin-bottom:16px; padding-bottom:8px; border-bottom:1px solid #e8e8e8; }
+.form-row { display:flex; align-items:center; margin-bottom:12px; gap:8px; }
+.form-row label { width:110px; text-align:right; font-size:14px; flex-shrink:0; color:#555; }
+.form-row input[type="text"],
+.form-row select { flex:1; padding:7px 11px; border:1px solid #d9d9d9; border-radius:4px; font-size:14px; outline:none; transition:.3s; }
+.form-row select { cursor:pointer; background:#fff; }
+.form-row input[type="text"]:focus,
+.form-row select:focus { border-color:#1890ff; box-shadow:0 0 0 2px rgba(24,144,255,.2); }
+.form-row input[readonly] { background:#f5f5f5; color:#666; cursor:default; }
+.info-row { display:flex; align-items:center; padding:4px 0; font-size:13px; }
+.info-row .info-label { width:110px; text-align:right; flex-shrink:0; color:#888; }
+.info-row .info-value { flex:1; padding-left:8px; color:#333; font-family:Consolas,monospace; word-break:break-all; }
+.btn { display:inline-flex; align-items:center; justify-content:center; padding:7px 16px; border:none; border-radius:4px; font-size:14px; cursor:pointer; transition:.3s; white-space:nowrap; }
+.btn-primary { background:#1890ff; color:#fff; }
+.btn-primary:hover { background:#40a9ff; }
+.btn-primary:disabled { background:#91caff; cursor:not-allowed; }
+.btn-default { background:#fff; color:#333; border:1px solid #d9d9d9; }
+.btn-default:hover { color:#1890ff; border-color:#1890ff; }
+.btn-success { background:#52c41a; color:#fff; }
+.btn-success:hover { background:#73d13d; }
+.btn-danger { background:#ff4d4f; color:#fff; }
+.btn-danger:hover { background:#ff7875; }
+.btn-start { width:100%; padding:10px; font-size:16px; margin-top:8px; }
+.log-box { background:#1e1e1e; color:#d4d4d4; font-family:"Consolas","Courier New",monospace; font-size:13px; padding:12px; border-radius:4px; height:300px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; line-height:1.5; }
+.log-box .log-success { color:#4ec9b0; }
+.log-box .log-fail { color:#f44747; }
+.log-box .log-info { color:#569cd6; }
+.status-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.status-bar span { font-size:13px; color:#888; }
+.clear-btn { font-size:12px; padding:3px 12px; }
+.advanced-toggle { cursor:pointer; color:#1890ff; font-size:13px; user-select:none; margin-bottom:8px; display:inline-block; }
+.advanced-toggle:hover { color:#40a9ff; }
+.advanced-section { display:none; margin-top:8px; padding-top:12px; border-top:1px dashed #e8e8e8; }
+.derive-summary { background:#f6f8fa; border-radius:4px; padding:12px; margin-top:8px; margin-bottom:12px; }
+.toast { position:fixed; top:20px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:10px 24px; border-radius:4px; font-size:14px; opacity:0; transition:opacity .3s; z-index:999; pointer-events:none; }
+.editor-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,.45); z-index:1000; justify-content:center; align-items:center; }
+.editor-overlay.active { display:flex; }
+.editor-box { background:#fff; border-radius:6px; width:80%; max-width:800px; max-height:85vh; display:flex; flex-direction:column; box-shadow:0 4px 12px rgba(0,0,0,.15); }
+.editor-header { display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid #e8e8e8; }
+.editor-header h3 { font-size:15px; font-weight:600; }
+.editor-body { flex:1; padding:16px 20px; overflow:hidden; }
+.editor-body textarea { width:100%; height:400px; border:1px solid #d9d9d9; border-radius:4px; padding:10px; font-family:Consolas,"Courier New",monospace; font-size:13px; resize:vertical; outline:none; }
+.editor-body textarea:focus { border-color:#1890ff; box-shadow:0 0 0 2px rgba(24,144,255,.2); }
+.editor-actions { display:flex; justify-content:flex-end; gap:8px; padding:12px 20px; border-top:1px solid #e8e8e8; }
+@media(max-width:640px){ .form-row{flex-wrap:wrap} .form-row label{width:100%;text-align:left} }
+</style>
+</head>
+<body>
+<div class="header">FreePatch 补丁打包工具</div>
+<div class="toast" id="toast"></div>
+<div class="container">
+  <div class="card">
+    <div class="card-title">配置管理</div>
+    <div class="form-row">
+      <label>当前配置</label>
+      <select id="profileSelect" onchange="switchProfile()"></select>
+      <button class="btn btn-success" onclick="saveProfile()">保存配置</button>
+      <button class="btn btn-primary" onclick="newProfile()">新增配置</button>
+      <button class="btn btn-danger" onclick="deleteProfile()">删除配置</button>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">参数设置</div>
+    <div class="form-row">
+      <label>项目路径</label>
+      <input type="text" id="projectPath" placeholder="选择 Java 项目根目录" onchange="onProjectPathChange()">
+      <button class="btn btn-default" onclick="pickFolder('projectPath')">浏览</button>
+    </div>
+    <div class="form-row">
+      <label>补丁文件</label>
+      <input type="text" id="patchFile" placeholder="自动检测：{项目路径}/diff.txt" oninput="updateEditorButton()">
+      <button class="btn btn-default" onclick="pickFile('patchFile')">浏览</button>
+      <button class="btn btn-default" id="editPatchBtn" onclick="openEditor()" disabled>编辑</button>
+    </div>
+    <div class="form-row">
+      <label>版本号</label>
+      <input type="text" id="version" placeholder="自动生成">
+      <button class="btn btn-default" onclick="regenerateVersion()" title="重新生成版本号" style="padding:7px 10px;">&#x21bb;</button>
+    </div>
+
+    <div class="derive-summary" id="deriveSummary">
+      <div class="info-row"><span class="info-label">Class目录</span><span class="info-value" id="infoClassPath">—</span></div>
+      <div class="info-row"><span class="info-label">导出目录</span><span class="info-value" id="infoDesPath">—</span></div>
+    </div>
+
+    <span class="advanced-toggle" onclick="toggleAdvanced()">&#9881; 高级设置 &#9660;</span>
+    <div class="advanced-section" id="advancedSection">
+      <div class="form-row">
+        <label>Class路径</label>
+        <input type="text" id="classPath" placeholder="自动推导">
+      </div>
+      <div class="form-row">
+        <label>导出路径</label>
+        <input type="text" id="desPath" placeholder="自动推导">
+      </div>
+      <div class="form-row">
+        <label>Java源码前缀</label>
+        <input type="text" id="srcJavaPrefix" placeholder="src/main/java">
+      </div>
+      <div class="form-row">
+        <label>资源文件前缀</label>
+        <input type="text" id="srcResourcePrefix" placeholder="src/main/resources">
+      </div>
+      <div class="form-row">
+        <label>Web目录前缀</label>
+        <input type="text" id="srcWebappPrefix" placeholder="src/main/webapp">
+      </div>
+      <div class="form-row">
+        <label>旧版Web目录</label>
+        <input type="text" id="webContent" placeholder="WebContent (旧版Eclipse项目)">
+      </div>
+      <div style="font-size:12px;color:#999;margin-top:4px;">留空则自动推导，修改后将覆盖自动值</div>
+    </div>
+
+    <button class="btn btn-primary btn-start" id="startBtn" onclick="startPatch()">开始打包</button>
+  </div>
+  <!-- 补丁文件编辑器 -->
+  <div class="editor-overlay" id="editorOverlay">
+    <div class="editor-box">
+      <div class="editor-header">
+        <h3>编辑补丁文件</h3>
+        <span style="font-size:13px;color:#888;" id="editorFilePath"></span>
+      </div>
+      <div class="editor-body">
+        <textarea id="editorTextarea" spellcheck="false"></textarea>
+      </div>
+      <div class="editor-actions">
+        <button class="btn btn-default" onclick="cancelEditor()">取消</button>
+        <button class="btn btn-primary" onclick="saveEditor()">保存</button>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="status-bar">
+      <span id="statusText">就绪</span>
+      <button class="btn btn-default clear-btn" onclick="clearLogs()">清空日志</button>
+    </div>
+    <div class="log-box" id="logBox"></div>
+  </div>
+</div>
+<script>
+let profiles = {};
+let currentProfile = '';
+let settingsCache = {};
+
+function deriveSettings(projPath) {
+  if (!projPath) return null;
+  // 规范化路径分隔符
+  const p = projPath.replace(/\\/g, '/').replace(/\/+$/, '');
+  // 提取路径最后一级目录名
+  const dirs = p.split('/');
+  const dirName = dirs[dirs.length - 1] || '';
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const version = dirName + '-' + now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate()) + '-' + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
+  return {
+    patchFile: p + '/diff.txt',
+    projectPath: p,
+    classPath: p + '/target/classes',
+    desPath: p + '/target/patch_pkg',
+    version: version,
+    srcJavaPrefix: 'src/main/java',
+    srcResourcePrefix: 'src/main/resources',
+    srcWebappPrefix: 'src/main/webapp',
+    webContent: 'WebContent'
+  };
+}
+
+function updateDeriveDisplay(derived) {
+  if (!derived) {
+    document.getElementById('infoClassPath').textContent = '—';
+    document.getElementById('infoDesPath').textContent = '—';
+    return;
+  }
+  document.getElementById('infoClassPath').textContent = derived.classPath;
+  document.getElementById('infoDesPath').textContent = derived.desPath;
+}
+
+function onProjectPathChange() {
+  const projPath = document.getElementById('projectPath').value.trim();
+  const derived = deriveSettings(projPath);
+  updateDeriveDisplay(derived);
+  if (derived) {
+    // 版本号和补丁文件路径始终跟随项目路径更新
+    const pf = document.getElementById('patchFile');
+    pf.value = derived.patchFile;
+    document.getElementById('version').value = derived.version;
+    // 高级字段仅当用户没手动修改时更新
+    autoFillIfEmpty('classPath', derived.classPath);
+    autoFillIfEmpty('desPath', derived.desPath);
+    autoFillIfEmpty('srcJavaPrefix', derived.srcJavaPrefix);
+    autoFillIfEmpty('srcResourcePrefix', derived.srcResourcePrefix);
+    autoFillIfEmpty('srcWebappPrefix', derived.srcWebappPrefix);
+    autoFillIfEmpty('webContent', derived.webContent);
+    // 自动在磁盘上创建 diff.txt（如果不存在）
+    ensurePatchFile(derived.patchFile);
+  }
+  settingsCache = derived || {};
+  updateEditorButton();
+}
+
+function autoFillIfEmpty(id, value) {
+  const el = document.getElementById(id);
+  if (!el.value.trim() || el.value.trim() === (settingsCache[id] || '')) {
+    el.value = value;
+  }
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.opacity = '1';
+  setTimeout(() => { el.style.opacity = '0'; }, 2000);
+}
+
+function toggleAdvanced() {
+  const sec = document.getElementById('advancedSection');
+  const tgl = document.querySelector('.advanced-toggle');
+  if (sec.style.display === 'block') {
+    sec.style.display = 'none';
+    tgl.innerHTML = '&#9881; 高级设置 &#9660;';
+  } else {
+    sec.style.display = 'block';
+    tgl.innerHTML = '&#9881; 高级设置 &#9650;';
+  }
+}
+
+function getFormSettings() {
+  // 先触发推导
+  const projPath = document.getElementById('projectPath').value.trim();
+  if (projPath) {
+    onProjectPathChange();
+  }
+  return {
+    patchFile: document.getElementById('patchFile').value.trim(),
+    projectPath: projPath,
+    webContent: document.getElementById('webContent').value.trim(),
+    classPath: document.getElementById('classPath').value.trim(),
+    desPath: document.getElementById('desPath').value.trim(),
+    version: document.getElementById('version').value.trim(),
+    srcJavaPrefix: document.getElementById('srcJavaPrefix').value.trim(),
+    srcResourcePrefix: document.getElementById('srcResourcePrefix').value.trim(),
+    srcWebappPrefix: document.getElementById('srcWebappPrefix').value.trim()
+  };
+}
+
+function setFormSettings(s) {
+  document.getElementById('projectPath').value = s.projectPath || '';
+  document.getElementById('patchFile').value = s.patchFile || '';
+
+  // 先推导再回填
+  const derived = deriveSettings(s.projectPath);
+  if (derived) {
+    document.getElementById('classPath').value = s.classPath || derived.classPath;
+    document.getElementById('desPath').value = s.desPath || derived.desPath;
+    document.getElementById('version').value = s.version || derived.version;
+    document.getElementById('srcJavaPrefix').value = s.srcJavaPrefix || derived.srcJavaPrefix;
+    document.getElementById('srcResourcePrefix').value = s.srcResourcePrefix || derived.srcResourcePrefix;
+    document.getElementById('srcWebappPrefix').value = s.srcWebappPrefix || derived.srcWebappPrefix;
+    document.getElementById('webContent').value = s.webContent || derived.webContent;
+    updateDeriveDisplay(derived);
+  } else {
+    document.getElementById('classPath').value = s.classPath || '';
+    document.getElementById('desPath').value = s.desPath || '';
+    document.getElementById('version').value = s.version || '';
+    document.getElementById('srcJavaPrefix').value = s.srcJavaPrefix || '';
+    document.getElementById('srcResourcePrefix').value = s.srcResourcePrefix || '';
+    document.getElementById('srcWebappPrefix').value = s.srcWebappPrefix || '';
+    document.getElementById('webContent').value = s.webContent || '';
+    updateDeriveDisplay(null);
+  }
+  settingsCache = derived || {};
+  updateEditorButton();
+}
+
+function populateProfiles() {
+  const sel = document.getElementById('profileSelect');
+  sel.innerHTML = '';
+  for (const name of Object.keys(profiles)) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    if (name === currentProfile) opt.selected = true;
+    sel.appendChild(opt);
+  }
+}
+
+async function loadConfig() {
+  try {
+    const resp = await fetch('/api/config');
+    const data = await resp.json();
+    currentProfile = data.currentProfile || '默认配置';
+    profiles = data.profiles || {};
+    if (Object.keys(profiles).length === 0) {
+      profiles['默认配置'] = {};
+    }
+    if (!profiles[currentProfile]) {
+      currentProfile = Object.keys(profiles)[0];
+    }
+    populateProfiles();
+    setFormSettings(profiles[currentProfile] || {});
+  } catch(e) { console.error(e); }
+}
+
+async function saveConfigToServer() {
+  await fetch('/api/config', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ currentProfile, profiles })
+  });
+}
+
+function switchProfile() {
+  const name = document.getElementById('profileSelect').value;
+  currentProfile = name;
+  setFormSettings(profiles[name] || {});
+}
+
+async function saveProfile() {
+  const name = document.getElementById('profileSelect').value;
+  profiles[name] = getFormSettings();
+  currentProfile = name;
+  await saveConfigToServer();
+  toast('配置 "' + name + '" 已保存');
+}
+
+async function newProfile() {
+  const name = prompt('请输入新配置名称:');
+  if (!name || name.trim() === '') return;
+  const trimmed = name.trim();
+  if (profiles[trimmed]) {
+    alert('配置名称 "' + trimmed + '" 已存在');
+    return;
+  }
+  profiles[trimmed] = getFormSettings();
+  currentProfile = trimmed;
+  await saveConfigToServer();
+  populateProfiles();
+  document.getElementById('profileSelect').value = trimmed;
+  toast('新配置 "' + trimmed + '" 已创建');
+}
+
+async function deleteProfile() {
+  const name = document.getElementById('profileSelect').value;
+  if (Object.keys(profiles).length <= 1) {
+    alert('至少保留一个配置');
+    return;
+  }
+  if (!confirm('确定删除配置 "' + name + '" 吗？')) return;
+  delete profiles[name];
+  currentProfile = Object.keys(profiles)[0];
+  await saveConfigToServer();
+  populateProfiles();
+  setFormSettings(profiles[currentProfile] || {});
+  toast('配置 "' + name + '" 已删除');
+}
+
+function log(msg, type) {
+  const box = document.getElementById('logBox');
+  const div = document.createElement('div');
+  if (type) div.className = type;
+  div.textContent = msg;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+function clearLogs() {
+  document.getElementById('logBox').innerHTML = '';
+}
+
+async function pickFile(id) {
+  try {
+    const resp = await fetch('/api/pick-file', { method:'POST' });
+    if (!resp.ok) { toast('请求失败: ' + await resp.text()); return; }
+    const data = await resp.json();
+    if (data.path) {
+      document.getElementById(id).value = data.path;
+      updateEditorButton();
+    }
+  } catch(e) { toast('打开文件对话框失败'); }
+}
+
+async function pickFolder(id) {
+  try {
+    const resp = await fetch('/api/pick-folder', { method:'POST' });
+    if (!resp.ok) { toast('请求失败: ' + await resp.text()); return; }
+    const data = await resp.json();
+    if (data.path) {
+      document.getElementById(id).value = data.path;
+      if (id === 'projectPath') onProjectPathChange();
+    }
+  } catch(e) { toast('打开目录对话框失败'); }
+}
+
+async function startPatch() {
+  const btn = document.getElementById('startBtn');
+  btn.disabled = true;
+  document.getElementById('statusText').textContent = '打包中...';
+  clearLogs();
+
+  profiles[currentProfile] = getFormSettings();
+  await saveConfigToServer();
+
+  const resp = await fetch('/api/start', {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify(getFormSettings())
+  });
+
+  if (!resp.ok) {
+    const err = await resp.text();
+    log('启动失败: ' + err, 'log-fail');
+    btn.disabled = false;
+    document.getElementById('statusText').textContent = '就绪';
+    return;
+  }
+
+  const evtSource = new EventSource('/api/logs');
+  evtSource.onmessage = function(e) {
+    const msg = e.data;
+    if (msg.indexOf('失败') !== -1) {
+      log(msg, 'log-fail');
+    } else if (msg.indexOf('成功') !== -1) {
+      log(msg, 'log-success');
+    } else if (msg.indexOf('===') !== -1) {
+      log(msg, 'log-info');
+    } else {
+      log(msg);
+    }
+
+    if (msg.indexOf('=== 打包完成') !== -1 || msg.indexOf('=== 打包失败') !== -1) {
+      evtSource.close();
+      btn.disabled = false;
+      document.getElementById('statusText').textContent = '已完成';
+    }
+  };
+  evtSource.onerror = function() {
+    evtSource.close();
+    btn.disabled = false;
+    document.getElementById('statusText').textContent = '就绪';
+  };
+}
+
+// 重新生成版本号（时间戳刷新）
+function regenerateVersion() {
+  const projPath = document.getElementById('projectPath').value.trim();
+  if (!projPath) {
+    toast('请先选择项目路径');
+    return;
+  }
+  const p = projPath.replace(/\\/g, '/').replace(/\/+$/, '');
+  const dirs = p.split('/');
+  const dirName = dirs[dirs.length - 1] || '';
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const version = dirName + '-' + now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate()) + '-' + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
+  document.getElementById('version').value = version;
+}
+
+// 在磁盘上自动创建补丁文件（如果不存在）
+async function ensurePatchFile(filePath) {
+  if (!filePath) return;
+  try {
+    await fetch('/api/ensure-file', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({path: filePath})
+    });
+  } catch(e) { /* 静默失败，不影响用户操作 */ }
+}
+
+// 补丁文件编辑器
+function updateEditorButton() {
+  const pf = document.getElementById('patchFile').value.trim();
+  document.getElementById('editPatchBtn').disabled = !pf;
+}
+
+async function openEditor() {
+  const filePath = document.getElementById('patchFile').value.trim();
+  if (!filePath) return;
+  document.getElementById('editorFilePath').textContent = filePath;
+  document.getElementById('editorTextarea').value = '加载中...';
+  document.getElementById('editorOverlay').classList.add('active');
+  try {
+    const resp = await fetch('/api/patch-content?path=' + encodeURIComponent(filePath));
+    const data = await resp.json();
+    document.getElementById('editorTextarea').value = data.content || '';
+  } catch(e) {
+    document.getElementById('editorTextarea').value = '// 加载失败: ' + e.message;
+  }
+}
+
+async function saveEditor() {
+  const filePath = document.getElementById('patchFile').value.trim();
+  const content = document.getElementById('editorTextarea').value;
+  try {
+    const resp = await fetch('/api/patch-content', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({path: filePath, content: content})
+    });
+    const data = await resp.json();
+    if (data.status === 'ok') {
+      toast('补丁文件已保存');
+      document.getElementById('editorOverlay').classList.remove('active');
+    } else {
+      toast('保存失败: ' + (data.message || '未知错误'));
+    }
+  } catch(e) {
+    toast('保存失败: ' + e.message);
+  }
+}
+
+function cancelEditor() {
+  document.getElementById('editorOverlay').classList.remove('active');
+}
+
+loadConfig();
+</script>
+</body>
+</html>
