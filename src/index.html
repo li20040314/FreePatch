@@ -88,6 +88,7 @@ body { font-family:"Microsoft YaHei","Segoe UI",sans-serif; background:#f0f2f5; 
       <label>版本号</label>
       <input type="text" id="version" placeholder="自动生成">
       <button class="btn btn-default" onclick="regenerateVersion()" title="重新生成版本号" style="padding:7px 10px;">&#x21bb;</button>
+      <button class="btn btn-default" onclick="openOutputDir()" title="打开打包目录" style="padding:7px 10px;">&#128194;</button>
     </div>
 
     <div class="derive-summary" id="deriveSummary">
@@ -467,6 +468,22 @@ function regenerateVersion() {
   const pad = n => String(n).padStart(2,'0');
   const version = dirName + '-' + now.getFullYear() + pad(now.getMonth()+1) + pad(now.getDate()) + '-' + pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
   document.getElementById('version').value = version;
+}
+
+function openOutputDir() {
+  const desPath = document.getElementById('desPath').value || document.getElementById('infoDesPath').textContent;
+  const version = document.getElementById('version').value;
+  if (desPath && version && desPath !== '—' && version !== '—') {
+    fetch('/api/open-folder', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({path: desPath + '/' + version})
+    }).then(r => r.json()).then(d => {
+      if (d.status !== 'ok') toast('打开失败: ' + (d.message || '未知错误'));
+    });
+  } else {
+    toast('请先配置项目路径和版本号');
+  }
 }
 
 // 在磁盘上自动创建补丁文件（如果不存在）

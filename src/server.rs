@@ -34,6 +34,7 @@ pub async fn run_server(state: Arc<AppState>) {
             get(handle_patch_content_get).post(handle_patch_content_post),
         )
         .route("/api/ensure-file", post(handle_ensure_file))
+        .route("/api/open-folder", post(handle_open_folder))
         .with_state(state);
 
     // 从 18080 开始查找可用端口
@@ -307,6 +308,18 @@ async fn handle_ensure_file(Json(body): Json<serde_json::Value>) -> Json<Value> 
     }
     match std::fs::write(file_path, "") {
         Ok(_) => Json(json!({"status": "ok", "created": true})),
+        Err(e) => Json(json!({"status": "error", "message": e.to_string()})),
+    }
+}
+
+async fn handle_open_folder(Json(body): Json<serde_json::Value>) -> Json<Value> {
+    let folder_path = match body.get("path").and_then(|v| v.as_str()) {
+        Some(p) if !p.is_empty() => p.replace('/', "\\"),
+        _ => return Json(json!({"status": "error", "message": "缺少path参数"})),
+    };
+
+    match std::process::Command::new("explorer").arg(&folder_path).spawn() {
+        Ok(_) => Json(json!({"status": "ok"})),
         Err(e) => Json(json!({"status": "error", "message": e.to_string()})),
     }
 }
